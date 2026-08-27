@@ -1,0 +1,46 @@
+-- tests/adapters/ts_spec_spec.lua
+describe("scan-o-tron-3000.adapters.ts-spec", function()
+  local ts_spec
+
+  before_each(function()
+    package.loaded["scan-o-tron-3000.adapters.ts-spec"] = nil
+    ts_spec = require("scan-o-tron-3000.adapters.ts-spec")
+  end)
+
+  describe("is_test_file", function()
+    it("matches .spec.ts files", function()
+      assert.is_true(ts_spec.is_test_file("/project/src/foo.spec.ts"))
+    end)
+
+    it("matches .test.ts files", function()
+      assert.is_true(ts_spec.is_test_file("/project/src/foo.test.ts"))
+    end)
+
+    it("does not match plain .ts files", function()
+      assert.is_false(ts_spec.is_test_file("/project/src/foo.ts"))
+    end)
+  end)
+
+  describe("treesitter_query", function()
+    it("discovers describe/it/test nodes in a real fixture buffer", function()
+      local bufnr = vim.fn.bufadd("tests/fixtures/example.spec.ts")
+      vim.fn.bufload(bufnr)
+      vim.bo[bufnr].filetype = "typescript"
+
+      local flat = ts_spec.treesitter_query(bufnr)
+
+      local names = {}
+      for _, pos in ipairs(flat) do
+        table.insert(names, pos.type .. ":" .. pos.name)
+      end
+
+      assert.is_true(vim.tbl_contains(names, "describe:outer"))
+      assert.is_true(vim.tbl_contains(names, "test:does the first thing"))
+      assert.is_true(vim.tbl_contains(names, "describe:inner"))
+      assert.is_true(vim.tbl_contains(names, "test:does the second thing"))
+      assert.is_true(vim.tbl_contains(names, "test:a bare test call"))
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+end)
