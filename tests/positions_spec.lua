@@ -57,4 +57,38 @@ describe("scan-o-tron-3000.positions", function()
     local tree = positions.build_tree(flat)
     assert.are.equal("idle", tree.children[1].state)
   end)
+
+  describe("discover", function()
+    it("wraps an adapter's treesitter_query into a position tree", function()
+      local bufnr = vim.fn.bufadd("tests/fixtures/example.spec.ts")
+      vim.fn.bufload(bufnr)
+      vim.bo[bufnr].filetype = "typescript"
+
+      local ts_spec = require("scan-o-tron-3000.adapters.ts-spec")
+      local tree = positions.discover(bufnr, ts_spec)
+
+      assert.are.equal(bufnr, tree.bufnr)
+      assert.are.equal("file", tree.type)
+      assert.is_true(#tree.children >= 1)
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("nests a same-line describe/it correctly (outer before inner in sort order)", function()
+      local bufnr = vim.fn.bufadd("tests/fixtures/same-line.spec.ts")
+      vim.fn.bufload(bufnr)
+      vim.bo[bufnr].filetype = "typescript"
+
+      local ts_spec = require("scan-o-tron-3000.adapters.ts-spec")
+      local tree = positions.discover(bufnr, ts_spec)
+
+      assert.are.equal(1, #tree.children)
+      local describe_node = tree.children[1]
+      assert.are.equal("describe", describe_node.type)
+      assert.are.equal(1, #describe_node.children)
+      assert.are.equal("test", describe_node.children[1] and describe_node.children[1].type or nil)
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
 end)

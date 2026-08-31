@@ -40,4 +40,11 @@ function M.build_tree(flat_positions)
   return root
 end
 
+function M.discover(bufnr, adapter)
+  local flat = adapter.treesitter_query(bufnr)
+  local tree = M.build_tree(flat)
+  tree.bufnr = bufnr
+  return tree
+end
+
 return M
