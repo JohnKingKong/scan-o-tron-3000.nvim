@@ -25,6 +25,23 @@ describe("scan-o-tron-3000.panel", function()
     assert.is_false(panel.is_open())
   end)
 
+  it("open() opens the panel if closed", function()
+    assert.is_false(panel.is_open())
+    panel.open()
+    assert.is_true(panel.is_open())
+  end)
+
+  it("open() is idempotent -- calling it again while already open does not close it", function()
+    panel.open()
+    assert.is_true(panel.is_open())
+    local winid = panel.winid()
+
+    panel.open()
+
+    assert.is_true(panel.is_open())
+    assert.are.equal(winid, panel.winid())
+  end)
+
   it("update() renders the file path and its test names once open", function()
     panel.toggle()
     local tree = positions.build_tree({ { type = "test", name = "does a thing", range = { 0, 0, 1, 0 } } })
@@ -59,6 +76,56 @@ describe("scan-o-tron-3000.panel", function()
     end
     assert.is_not_nil(file_row)
     assert.is_true(file_row:find("[✗]", 1, true) ~= nil)
+  end)
+
+  it("colors each row's icon with the highlight group matching its node state", function()
+    panel.toggle()
+    local signs = require("scan-o-tron-3000.signs")
+
+    local tree = positions.build_tree({
+      { type = "test", name = "passes", range = { 0, 0, 1, 0 } },
+      { type = "test", name = "fails", range = { 2, 0, 3, 0 } },
+    })
+    tree.children[1].state = "pass"
+    tree.children[2].state = "fail"
+    tree.state = "fail"
+    panel.update("src/foo.spec.ts", tree)
+
+    local bufnr = vim.api.nvim_win_get_buf(panel.winid())
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+
+    local function lnum_of(text)
+      for i, line in ipairs(lines) do
+        if line:find(text, 1, true) then
+          return i
+        end
+      end
+    end
+
+    local marks = vim.api.nvim_buf_get_extmarks(bufnr, panel.NAMESPACE, 0, -1, { details = true })
+    local hl_by_lnum = {}
+    for _, mark in ipairs(marks) do
+      hl_by_lnum[mark[2] + 1] = mark[4].hl_group
+    end
+
+    assert.are.equal(signs.HL_GROUPS.fail, hl_by_lnum[lnum_of("foo.spec.ts")])
+    assert.are.equal(signs.HL_GROUPS.pass, hl_by_lnum[lnum_of("passes")])
+    assert.are.equal(signs.HL_GROUPS.fail, hl_by_lnum[lnum_of("fails")])
+  end)
+
+  it("clears previous icon highlights on re-render instead of accumulating them", function()
+    panel.toggle()
+
+    local tree = positions.build_tree({ { type = "test", name = "flaky", range = { 0, 0, 1, 0 } } })
+    tree.children[1].state = "fail"
+    tree.state = "fail"
+    panel.update("src/foo.spec.ts", tree)
+    panel.update("src/foo.spec.ts", tree)
+
+    local bufnr = vim.api.nvim_win_get_buf(panel.winid())
+    local marks = vim.api.nvim_buf_get_extmarks(bufnr, panel.NAMESPACE, 0, -1, {})
+    -- One highlight for the file row, one for the "flaky" test row -- not doubled.
+    assert.are.equal(2, #marks)
   end)
 
   it("auto-expands a file whose tree has a failing test", function()

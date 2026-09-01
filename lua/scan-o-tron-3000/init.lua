@@ -74,7 +74,7 @@ local function run_scope(kind)
   end
 
   results.aggregate(tree)
-  panel.update(path, tree)
+  panel.open()
   runner.run({
     tree = tree,
     adapter = adapter,
@@ -83,6 +83,7 @@ local function run_scope(kind)
       panel.update(path, tree)
     end,
   })
+  panel.update(path, tree)
 end
 
 function M.run_nearest()
