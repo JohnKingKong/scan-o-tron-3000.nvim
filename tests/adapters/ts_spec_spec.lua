@@ -80,10 +80,7 @@ describe("scan-o-tron-3000.adapters.ts-spec", function()
         position = { name = "does the thing" },
         package_json_path = "tests/fixtures/package-mocha.json",
       })
-      assert.are.same(
-        { "npx", "mocha", "--reporter", "json", "src/foo.spec.ts", "--grep", "does the thing" },
-        cmd
-      )
+      assert.are.same({ "npx", "mocha", "--reporter", "json", "src/foo.spec.ts", "--grep", "does the thing" }, cmd)
     end)
   end)
 

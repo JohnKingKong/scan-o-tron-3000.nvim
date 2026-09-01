@@ -1,13 +1,11 @@
 describe("scan-o-tron-3000.runner", function()
-  local runner, positions, signs
+  local runner, positions
 
   before_each(function()
     package.loaded["scan-o-tron-3000.runner"] = nil
     package.loaded["scan-o-tron-3000.positions"] = nil
-    package.loaded["scan-o-tron-3000.signs"] = nil
     runner = require("scan-o-tron-3000.runner")
     positions = require("scan-o-tron-3000.positions")
-    signs = require("scan-o-tron-3000.signs")
   end)
 
   local function make_tree()
