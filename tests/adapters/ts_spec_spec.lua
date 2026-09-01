@@ -86,6 +86,29 @@ describe("scan-o-tron-3000.adapters.ts-spec", function()
       })
       assert.are.same({ "npx", "mocha", "--reporter", "json", "src/foo.spec.ts", "--grep", "does the thing" }, cmd)
     end)
+
+    it("escapes regex metacharacters in the test name for -t (e.g. RxJS-style '$' suffixes)", function()
+      local cmd = ts_spec.build_command({
+        kind = "test",
+        path = "src/foo.spec.ts",
+        position = { name = "onMessageUpdated$ emits" },
+        package_json_path = "tests/fixtures/package-jest.json",
+      })
+      assert.are.same({ "npx", "jest", "--json", "src/foo.spec.ts", "-t", "onMessageUpdated\\$ emits" }, cmd)
+    end)
+
+    it("escapes regex metacharacters in the test name for --grep", function()
+      local cmd = ts_spec.build_command({
+        kind = "test",
+        path = "src/foo.spec.ts",
+        position = { name = "does the (thing) [again]" },
+        package_json_path = "tests/fixtures/package-mocha.json",
+      })
+      assert.are.same(
+        { "npx", "mocha", "--reporter", "json", "src/foo.spec.ts", "--grep", "does the \\(thing\\) \\[again\\]" },
+        cmd
+      )
+    end)
   end)
 
   describe("parse_results", function()

@@ -81,6 +81,14 @@ function M.detect_framework(package_json_path)
   return nil
 end
 
+-- Both jest/vitest's -t and mocha's --grep treat their argument as a regex.
+-- Test names routinely contain regex metacharacters (this codebase's RxJS
+-- naming convention alone produces titles like "onMessageUpdated$ emits"),
+-- so the name is escaped here to match literally instead of as a pattern.
+local function escape_regex(name)
+  return (name:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?{}|\\]", "\\%0"))
+end
+
 local function append_scope_args(cmd, framework, scope)
   if scope.kind == "project" then
     return cmd
@@ -93,13 +101,13 @@ local function append_scope_args(cmd, framework, scope)
   end
 
   -- "test" or "suite" scope: filter by name
-  local name = scope.position.name
+  local pattern = escape_regex(scope.position.name)
   if framework == "vitest" or framework == "jest" then
     table.insert(cmd, "-t")
-    table.insert(cmd, name)
+    table.insert(cmd, pattern)
   elseif framework == "mocha" then
     table.insert(cmd, "--grep")
-    table.insert(cmd, name)
+    table.insert(cmd, pattern)
   end
   return cmd
 end
