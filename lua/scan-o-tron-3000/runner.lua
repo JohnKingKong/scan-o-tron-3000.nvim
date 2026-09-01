@@ -32,8 +32,9 @@ function M.run(opts)
 
   local ok, err = pcall(function()
     local cmd = adapter.build_command(scope)
+    local cwd = scope.package_json_path and vim.fs.dirname(scope.package_json_path) or nil
 
-    system_fn(cmd, { text = true }, function(obj)
+    system_fn(cmd, { text = true, cwd = cwd }, function(obj)
       in_flight[key] = nil
 
       local parse_ok, parsed = pcall(adapter.parse_results, obj.stdout or "")

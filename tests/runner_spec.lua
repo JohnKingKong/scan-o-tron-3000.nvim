@@ -46,6 +46,39 @@ describe("scan-o-tron-3000.runner", function()
     assert.are.equal("pass", tree.children[1].state)
   end)
 
+  it("spawns the process with cwd set to the package.json's directory", function()
+    local tree = make_tree()
+    local adapter = {
+      build_command = function()
+        return { "fake-cmd" }
+      end,
+      parse_results = function()
+        return {}
+      end,
+    }
+
+    local captured_opts
+    local fake_system = function(_, opts, on_exit)
+      captured_opts = opts
+      on_exit({ code = 0, stdout = "{}" })
+      return { pid = 1 }
+    end
+
+    runner.run({
+      tree = tree,
+      adapter = adapter,
+      scope = {
+        kind = "file",
+        path = "x",
+        package_json_path = "/repo/apps/console/package.json",
+        scope_leaf_names = { "passes" },
+      },
+      system_fn = fake_system,
+    })
+
+    assert.are.equal("/repo/apps/console", captured_opts.cwd)
+  end)
+
   it("invokes on_complete after applying results", function()
     local tree = make_tree()
     local adapter = {
