@@ -32,6 +32,10 @@ describe("scan-o-tron-3000.signs", function()
     local marks = vim.api.nvim_buf_get_extmarks(bufnr, signs.NAMESPACE, 0, -1, { details = true })
     assert.are.equal(1, #marks)
     assert.are.equal(2, marks[1][2]) -- row
+    -- nvim pads single-width sign_text glyphs with a trailing space to fill
+    -- the 2-cell sign column, so compare after trimming.
+    assert.are.equal(signs.ICONS.pass, vim.trim(marks[1][4].sign_text))
+    assert.are.equal(signs.HL_GROUPS.pass, marks[1][4].sign_hl_group)
   end)
 
   it("re-rendering clears previous signs first", function()

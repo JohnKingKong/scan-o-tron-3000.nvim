@@ -3,9 +3,9 @@ local M = {}
 M.NAMESPACE = vim.api.nvim_create_namespace("scan-o-tron-3000")
 
 M.ICONS = {
-  running = "",
-  pass = "",
-  fail = "",
+  running = "●",
+  pass = "✓",
+  fail = "✗",
   errored = "?",
 }
 
