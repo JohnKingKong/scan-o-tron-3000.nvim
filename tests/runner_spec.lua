@@ -109,6 +109,12 @@ describe("scan-o-tron-3000.runner", function()
 
     assert.is_false(completed)
     captured_on_exit({ code = 0, stdout = "{}" })
+    -- signs.render()/on_complete() are deferred via vim.schedule (they touch
+    -- buffer/window state, illegal from vim.system's real fast-event
+    -- callback), so pump the loop until the scheduled work runs.
+    vim.wait(100, function()
+      return completed
+    end)
     assert.is_true(completed)
   end)
 

@@ -40,11 +40,16 @@ function M.run(opts)
       local parse_ok, parsed = pcall(adapter.parse_results, obj.stdout or "")
       results.apply(tree, parse_ok and parsed or {}, scope.scope_leaf_names)
       results.aggregate(tree)
-      signs.render(tree.bufnr, tree)
 
-      if opts.on_complete then
-        opts.on_complete()
-      end
+      -- vim.system's on_exit runs in a fast-event (libuv) context, where
+      -- nvim_buf_*/nvim_win_* calls are illegal; defer them to the main loop.
+      vim.schedule(function()
+        signs.render(tree.bufnr, tree)
+
+        if opts.on_complete then
+          opts.on_complete()
+        end
+      end)
     end)
   end)
 
