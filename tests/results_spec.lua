@@ -67,6 +67,29 @@ describe("scan-o-tron-3000.results", function()
       results.aggregate(tree)
       assert.are.equal("pass", tree.children[1].state)
     end)
+
+    it("marks a describe as fail (not errored) when its only bad child is errored", function()
+      local tree = make_tree()
+      results.apply(tree, { passes = { status = "pass" } }, { "passes", "never reports" })
+      results.aggregate(tree)
+      local outer = tree.children[1]
+      assert.are.equal("errored", outer.children[3].state)
+      assert.are.equal("fail", outer.state)
+    end)
+
+    it("marks a describe as deterministically fail with mixed fail/errored siblings", function()
+      local tree = make_tree()
+      results.apply(
+        tree,
+        { passes = { status = "pass" }, fails = { status = "fail" } },
+        { "passes", "fails", "never reports" }
+      )
+      results.aggregate(tree)
+      local outer = tree.children[1]
+      assert.are.equal("fail", outer.children[2].state)
+      assert.are.equal("errored", outer.children[3].state)
+      assert.are.equal("fail", outer.state)
+    end)
   end)
 
   describe("set_running", function()

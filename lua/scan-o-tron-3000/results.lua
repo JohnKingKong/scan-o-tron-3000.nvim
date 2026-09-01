@@ -41,6 +41,10 @@ function M.aggregate(node)
     end
   end
 
+  if PRIORITY[best] == 3 then
+    best = "fail"
+  end
+
   if node.type == "describe" then
     node.state = best
   end
