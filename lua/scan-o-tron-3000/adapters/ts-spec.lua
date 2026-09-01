@@ -60,4 +60,63 @@ function M.treesitter_query(bufnr)
   return flat
 end
 
+function M.detect_framework(package_json_path)
+  local ok, contents = pcall(vim.fn.readfile, package_json_path)
+  if not ok then
+    return nil
+  end
+  local decoded = vim.json.decode(table.concat(contents, "\n"))
+  local deps = vim.tbl_extend("force", decoded.dependencies or {}, decoded.devDependencies or {})
+
+  if deps.vitest then
+    return "vitest"
+  elseif deps.jest then
+    return "jest"
+  elseif deps.mocha then
+    return "mocha"
+  end
+  return nil
+end
+
+local function append_scope_args(cmd, framework, scope)
+  if scope.kind == "project" then
+    return cmd
+  end
+
+  table.insert(cmd, scope.path)
+
+  if scope.kind == "file" then
+    return cmd
+  end
+
+  -- "test" or "suite" scope: filter by name
+  local name = scope.position.name
+  if framework == "vitest" or framework == "jest" then
+    table.insert(cmd, "-t")
+    table.insert(cmd, name)
+  elseif framework == "mocha" then
+    table.insert(cmd, "--grep")
+    table.insert(cmd, name)
+  end
+  return cmd
+end
+
+function M.build_command(scope)
+  local framework = M.detect_framework(scope.package_json_path)
+  if not framework then
+    error("scan-o-tron-3000: could not detect vitest/jest/mocha from " .. scope.package_json_path)
+  end
+
+  local cmd
+  if framework == "vitest" then
+    cmd = { "npx", "vitest", "run", "--reporter=json" }
+  elseif framework == "jest" then
+    cmd = { "npx", "jest", "--json" }
+  else
+    cmd = { "npx", "mocha", "--reporter", "json" }
+  end
+
+  return append_scope_args(cmd, framework, scope)
+end
+
 return M

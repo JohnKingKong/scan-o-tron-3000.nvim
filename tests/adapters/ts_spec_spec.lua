@@ -43,4 +43,47 @@ describe("scan-o-tron-3000.adapters.ts-spec", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
   end)
+
+  describe("detect_framework", function()
+    it("detects vitest", function()
+      assert.are.equal("vitest", ts_spec.detect_framework("tests/fixtures/package-vitest.json"))
+    end)
+
+    it("detects jest", function()
+      assert.are.equal("jest", ts_spec.detect_framework("tests/fixtures/package-jest.json"))
+    end)
+
+    it("detects mocha", function()
+      assert.are.equal("mocha", ts_spec.detect_framework("tests/fixtures/package-mocha.json"))
+    end)
+  end)
+
+  describe("build_command", function()
+    it("builds a project-wide vitest command", function()
+      local cmd = ts_spec.build_command({ kind = "project", package_json_path = "tests/fixtures/package-vitest.json" })
+      assert.are.same({ "npx", "vitest", "run", "--reporter=json" }, cmd)
+    end)
+
+    it("builds a file-scoped jest command", function()
+      local cmd = ts_spec.build_command({
+        kind = "file",
+        path = "src/foo.spec.ts",
+        package_json_path = "tests/fixtures/package-jest.json",
+      })
+      assert.are.same({ "npx", "jest", "--json", "src/foo.spec.ts" }, cmd)
+    end)
+
+    it("builds a test-scoped mocha command using --grep", function()
+      local cmd = ts_spec.build_command({
+        kind = "test",
+        path = "src/foo.spec.ts",
+        position = { name = "does the thing" },
+        package_json_path = "tests/fixtures/package-mocha.json",
+      })
+      assert.are.same(
+        { "npx", "mocha", "--reporter", "json", "src/foo.spec.ts", "--grep", "does the thing" },
+        cmd
+      )
+    end)
+  end)
 end)
