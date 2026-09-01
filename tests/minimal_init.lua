@@ -9,4 +9,11 @@ vim.opt.rtp:append(".deps/nvim-treesitter")
 vim.opt.swapfile = false
 
 vim.cmd("runtime! plugin/plenary.vim")
-require("nvim-treesitter.configs").setup({ ensure_installed = {}, sync_install = false })
+
+-- nvim-treesitter.configs was removed in the installed nvim-treesitter version;
+-- the typescript parser itself works fine via vim.treesitter.* builtins, this
+-- call is vestigial. pcall it so a missing module doesn't print a banner into
+-- every `make test` run.
+pcall(function()
+  require("nvim-treesitter.configs").setup({ ensure_installed = {}, sync_install = false })
+end)

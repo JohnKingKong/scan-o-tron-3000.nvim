@@ -45,7 +45,7 @@ function M.aggregate(node)
     best = "fail"
   end
 
-  if node.type == "describe" then
+  if node.type == "describe" or node.type == "file" then
     node.state = best
   end
   return best

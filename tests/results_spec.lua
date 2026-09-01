@@ -90,6 +90,18 @@ describe("scan-o-tron-3000.results", function()
       assert.are.equal("errored", outer.children[3].state)
       assert.are.equal("fail", outer.state)
     end)
+
+    it("also sets state on the file-type root node, not just describe nodes", function()
+      local tree = make_tree()
+      results.apply(
+        tree,
+        { passes = { status = "pass" }, fails = { status = "fail" } },
+        { "passes", "fails", "never reports" }
+      )
+      results.aggregate(tree)
+      assert.are.equal("file", tree.type)
+      assert.are.equal("fail", tree.state)
+    end)
   end)
 
   describe("set_running", function()

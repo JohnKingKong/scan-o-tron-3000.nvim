@@ -65,7 +65,10 @@ function M.detect_framework(package_json_path)
   if not ok then
     return nil
   end
-  local decoded = vim.json.decode(table.concat(contents, "\n"))
+  local decode_ok, decoded = pcall(vim.json.decode, table.concat(contents, "\n"))
+  if not decode_ok then
+    return nil
+  end
   local deps = vim.tbl_extend("force", decoded.dependencies or {}, decoded.devDependencies or {})
 
   if deps.vitest then

@@ -39,6 +39,28 @@ describe("scan-o-tron-3000.panel", function()
     assert.is_true(content:find("does a thing", 1, true) ~= nil)
   end)
 
+  it("renders the fail icon on the file-level row when the root node's state is fail", function()
+    panel.toggle()
+    local tree = positions.build_tree({ { type = "test", name = "broken", range = { 0, 0, 1, 0 } } })
+    tree.children[1].state = "fail"
+    -- Mirrors what results.aggregate() now does: roll the failure up onto the
+    -- file-type root node, not just describe nodes.
+    tree.state = "fail"
+    panel.update("src/foo.spec.ts", tree)
+
+    local bufnr = vim.api.nvim_win_get_buf(panel.winid())
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local file_row
+    for _, line in ipairs(lines) do
+      if line:find("foo.spec.ts", 1, true) then
+        file_row = line
+        break
+      end
+    end
+    assert.is_not_nil(file_row)
+    assert.is_true(file_row:find("[✗]", 1, true) ~= nil)
+  end)
+
   it("auto-expands a file whose tree has a failing test", function()
     panel.toggle()
     local tree = positions.build_tree({ { type = "test", name = "broken", range = { 0, 0, 1, 0 } } })

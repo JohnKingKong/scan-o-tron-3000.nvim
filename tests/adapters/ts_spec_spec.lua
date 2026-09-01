@@ -56,6 +56,10 @@ describe("scan-o-tron-3000.adapters.ts-spec", function()
     it("detects mocha", function()
       assert.are.equal("mocha", ts_spec.detect_framework("tests/fixtures/package-mocha.json"))
     end)
+
+    it("returns nil instead of throwing on a malformed package.json", function()
+      assert.is_nil(ts_spec.detect_framework("tests/fixtures/package-malformed.json"))
+    end)
   end)
 
   describe("build_command", function()

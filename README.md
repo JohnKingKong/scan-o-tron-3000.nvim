@@ -12,7 +12,7 @@ neotest's gutter icons drift out of sync, its adapter/config setup is heavier th
 
 ## How it works
 
-1. Opening a recognized test file builds a position tree of every `describe`/`it` via treesitter.
+1. Triggering a run builds a fresh position tree of every `describe`/`it` in the current file via treesitter — there's no proactive scan on buffer open, the tree is (re)built on demand each time.
 2. `:ScanOTron run-nearest` runs whatever test or suite the cursor is inside; `run-file` runs the whole file; `run-project` runs everything.
 3. While a run is in flight, affected lines get a running mark; on completion they flip to a green check, red X, or (if a test never reported at all) a distinct "errored" mark — so a crashed run is never confused with a pass.
 4. `:ScanOTron toggle-panel` opens a per-file tree of every test run this session; failing tests auto-expand with their captured output, `<CR>` jumps to a test's source line.
@@ -130,6 +130,7 @@ Run `:checkhealth scan-o-tron-3000` to verify `npx` and the `typescript` treesit
 - No DAP/debugger integration.
 - No `.each`/`.skip`/templated test-name variants in the `ts-spec` treesitter query.
 - No queueing of concurrent run requests — a second trigger while one is in flight no-ops with a notification rather than queueing.
+- Result matching is by leaf test name only, not full describe-block ancestry — two tests with identical titles in different `describe` blocks in the same file will collide and may show each other's pass/fail status.
 
 ---
 
