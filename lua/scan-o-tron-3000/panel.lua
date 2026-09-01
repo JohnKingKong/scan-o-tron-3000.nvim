@@ -6,9 +6,24 @@ local state = {
   bufnr = nil,
   winid = nil,
   prev_winid = nil,
-  files = {}, -- [path] = { tree = ..., expanded = { [node] = bool } }
-  line_to_node = {}, -- [lnum] = { node = ..., path = ... } for jump/toggle on <CR>
+  files = {}, -- [path] = { tree = ..., expanded = { [key] = bool } }
+  line_to_node = {}, -- [lnum] = { node = ..., path = ..., key = ... } for jump/toggle on <CR>
 }
+
+local function node_key(parent_key, node)
+  return parent_key .. "|" .. node.type .. ":" .. (node.name or "")
+end
+
+local function compute_force_expanded(node, parent_key, out)
+  local key = node_key(parent_key, node)
+  if node.state == "fail" or node.state == "errored" then
+    out[key] = true
+  end
+  for _, child in ipairs(node.children) do
+    compute_force_expanded(child, key, out)
+  end
+  return out
+end
 
 function M.is_open()
   return state.winid ~= nil and vim.api.nvim_win_is_valid(state.winid)
@@ -16,20 +31,6 @@ end
 
 function M.winid()
   return state.winid
-end
-
-local function default_expanded(tree)
-  local expanded = {}
-  local function walk(node)
-    if node.state == "fail" or node.state == "errored" then
-      expanded[node] = true
-    end
-    for _, child in ipairs(node.children) do
-      walk(child)
-    end
-  end
-  walk(tree)
-  return expanded
 end
 
 local function icon_for(node)
@@ -49,15 +50,17 @@ local function render()
 
   for _, path in ipairs(paths) do
     local entry = state.files[path]
+    local root_key = node_key("", entry.tree)
     table.insert(lines, string.format("[%s] %s", icon_for(entry.tree), path))
-    line_to_node[#lines] = { node = entry.tree, path = path }
+    line_to_node[#lines] = { node = entry.tree, path = path, key = root_key }
 
-    local function walk(node, depth)
+    local function walk(node, depth, parent_key)
       for _, child in ipairs(node.children) do
+        local key = node_key(parent_key, child)
         table.insert(lines, string.format("%s[%s] %s", string.rep("  ", depth), icon_for(child), child.name))
-        line_to_node[#lines] = { node = child, path = path }
-        if entry.expanded[child] and #child.children > 0 then
-          walk(child, depth + 1)
+        line_to_node[#lines] = { node = child, path = path, key = key }
+        if entry.expanded[key] and #child.children > 0 then
+          walk(child, depth + 1, key)
         elseif child.type == "test" and child.message then
           for _, msg_line in ipairs(vim.split(child.message, "\n")) do
             table.insert(lines, string.rep("  ", depth + 1) .. msg_line)
@@ -66,8 +69,8 @@ local function render()
       end
     end
 
-    if entry.expanded[entry.tree] ~= false then
-      walk(entry.tree, 1)
+    if entry.expanded[root_key] ~= false then
+      walk(entry.tree, 1, root_key)
     end
   end
 
@@ -86,7 +89,7 @@ local function on_confirm()
 
   if #entry.node.children > 0 then
     local file_entry = state.files[entry.path]
-    file_entry.expanded[entry.node] = not file_entry.expanded[entry.node]
+    file_entry.expanded[entry.key] = not file_entry.expanded[entry.key]
     render()
     return
   end
@@ -127,15 +130,14 @@ end
 
 function M.update(path, tree)
   local existing = state.files[path]
-  state.files[path] = {
-    tree = tree,
-    expanded = existing and existing.expanded or default_expanded(tree),
-  }
+  local expanded = existing and existing.expanded or {}
 
-  for node in pairs(default_expanded(tree)) do
-    state.files[path].expanded[node] = true
+  local force = compute_force_expanded(tree, "", {})
+  for key in pairs(force) do
+    expanded[key] = true
   end
 
+  state.files[path] = { tree = tree, expanded = expanded }
   render()
 end
 
