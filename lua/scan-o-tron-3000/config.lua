@@ -1,7 +1,7 @@
 local M = {}
 
 local DEFAULTS = {
-  adapters = {},
+  adapters = { require("scan-o-tron-3000.adapters.ts-spec") },
 }
 
 local state = vim.deepcopy(DEFAULTS)

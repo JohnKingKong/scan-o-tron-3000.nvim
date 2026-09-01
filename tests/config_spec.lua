@@ -6,9 +6,13 @@ describe("scan-o-tron-3000.config", function()
     config = require("scan-o-tron-3000.config")
   end)
 
-  it("defaults to an empty setup with no adapters registered yet", function()
+  it("defaults to the ts-spec adapter when setup() is called with no adapters key", function()
     config.setup()
-    assert.are.same({}, config.get().adapters)
+    local names = {}
+    for _, adapter in ipairs(config.get().adapters) do
+      table.insert(names, adapter.name)
+    end
+    assert.is_true(vim.tbl_contains(names, "ts-spec"))
   end)
 
   it("stores adapters passed to setup()", function()
@@ -17,7 +21,11 @@ describe("scan-o-tron-3000.config", function()
     assert.are.same({ fake_adapter }, config.get().adapters)
   end)
 
-  it("get() returns defaults if setup() was never called", function()
-    assert.are.same({}, config.get().adapters)
+  it("registers the ts-spec adapter by default when setup() is never called", function()
+    local names = {}
+    for _, adapter in ipairs(config.get().adapters) do
+      table.insert(names, adapter.name)
+    end
+    assert.is_true(vim.tbl_contains(names, "ts-spec"))
   end)
 end)
