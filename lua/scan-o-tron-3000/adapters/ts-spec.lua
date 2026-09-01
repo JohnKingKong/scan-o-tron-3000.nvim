@@ -138,10 +138,14 @@ function M.parse_results(stdout)
   elseif decoded.tests then
     -- mocha shape: each test has `err` populated (non-empty) only on failure
     for _, test in ipairs(decoded.tests) do
-      local failed = next(test.err or {}) ~= nil
+      local err = test.err
+      if err == vim.NIL then
+        err = nil
+      end
+      local failed = next(err or {}) ~= nil
       by_name[test.title] = {
         status = failed and "fail" or "pass",
-        message = failed and test.err.message or nil,
+        message = failed and err.message or nil,
       }
     end
   end

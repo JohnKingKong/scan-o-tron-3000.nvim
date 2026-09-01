@@ -126,5 +126,13 @@ describe("scan-o-tron-3000.adapters.ts-spec", function()
       assert.are.equal("fail", parsed["fails"].status)
       assert.are.equal("expected 1 to be 2", parsed["fails"].message)
     end)
+
+    it("treats a mocha test with a JSON null err as a pass, not a crash", function()
+      local stdout = '{"tests":[{"title":"passes","fullTitle":"outer passes","err":null}]}'
+
+      local parsed = ts_spec.parse_results(stdout)
+      assert.are.equal("pass", parsed["passes"].status)
+      assert.is_nil(parsed["passes"].message)
+    end)
   end)
 end)
