@@ -10,17 +10,17 @@ local state = {
   line_to_node = {}, -- [lnum] = { node = ..., path = ..., key = ... } for jump/toggle on <CR>
 }
 
-local function node_key(parent_key, node)
-  return parent_key .. "|" .. node.type .. ":" .. (node.name or "")
+local function node_key(parent_key, node, index)
+  return parent_key .. "|" .. node.type .. ":" .. (index or "") .. ":" .. (node.name or "")
 end
 
-local function compute_force_expanded(node, parent_key, out)
-  local key = node_key(parent_key, node)
+local function compute_force_expanded(node, parent_key, out, index)
+  local key = node_key(parent_key, node, index)
   if node.state == "fail" or node.state == "errored" then
     out[key] = true
   end
-  for _, child in ipairs(node.children) do
-    compute_force_expanded(child, key, out)
+  for i, child in ipairs(node.children) do
+    compute_force_expanded(child, key, out, i)
   end
   return out
 end
@@ -55,8 +55,8 @@ local function render()
     line_to_node[#lines] = { node = entry.tree, path = path, key = root_key }
 
     local function walk(node, depth, parent_key)
-      for _, child in ipairs(node.children) do
-        local key = node_key(parent_key, child)
+      for i, child in ipairs(node.children) do
+        local key = node_key(parent_key, child, i)
         table.insert(lines, string.format("%s[%s] %s", string.rep("  ", depth), icon_for(child), child.name))
         line_to_node[#lines] = { node = child, path = path, key = key }
         if entry.expanded[key] and #child.children > 0 then

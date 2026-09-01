@@ -108,4 +108,69 @@ describe("scan-o-tron-3000.panel", function()
 
     assert.is_true(buffer_content():find("inner", 1, true) ~= nil)
   end)
+
+  it("does not alias expand state between same-named sibling nodes", function()
+    panel.toggle()
+
+    local function buffer_content()
+      local bufnr = vim.api.nvim_win_get_buf(panel.winid())
+      return table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+    end
+
+    local function press_enter_on(text)
+      local bufnr = vim.api.nvim_win_get_buf(panel.winid())
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      local target_lnum
+      for i, line in ipairs(lines) do
+        if line:find(text, 1, true) then
+          target_lnum = i
+          break
+        end
+      end
+      assert.is_not_nil(target_lnum)
+      vim.api.nvim_win_set_cursor(panel.winid(), { target_lnum, 0 })
+
+      local cr_callback
+      for _, km in ipairs(vim.api.nvim_buf_get_keymap(bufnr, "n")) do
+        if km.lhs == "<CR>" then
+          cr_callback = km.callback
+          break
+        end
+      end
+      assert.is_not_nil(cr_callback)
+      cr_callback()
+    end
+
+    -- Two top-level `describe` blocks with the SAME name, each with a distinctly
+    -- named test child, so we can tell which sibling's expand state applied.
+    local function build_duplicate_named_tree()
+      return positions.build_tree({
+        { type = "describe", name = "edge cases", range = { 0, 0, 2, 0 } },
+        { type = "test", name = "case A", range = { 1, 0, 1, 5 } },
+        { type = "describe", name = "edge cases", range = { 3, 0, 5, 0 } },
+        { type = "test", name = "case B", range = { 4, 0, 4, 5 } },
+      })
+    end
+
+    local tree1 = build_duplicate_named_tree()
+    panel.update("src/foo.spec.ts", tree1)
+
+    -- Both same-named describes start collapsed (neither is failing).
+    assert.is_true(buffer_content():find("case A", 1, true) == nil)
+    assert.is_true(buffer_content():find("case B", 1, true) == nil)
+
+    -- Expand only the FIRST "edge cases" describe (the one containing "case A").
+    press_enter_on("edge cases")
+    assert.is_true(buffer_content():find("case A", 1, true) ~= nil)
+    assert.is_true(buffer_content():find("case B", 1, true) == nil)
+
+    -- Re-run with a fresh, structurally-equivalent tree (new table identities).
+    local tree2 = build_duplicate_named_tree()
+    assert.are_not.equal(tree1, tree2)
+    panel.update("src/foo.spec.ts", tree2)
+
+    -- Expand state must still apply to only the first sibling, not both.
+    assert.is_true(buffer_content():find("case A", 1, true) ~= nil)
+    assert.is_true(buffer_content():find("case B", 1, true) == nil)
+  end)
 end)
