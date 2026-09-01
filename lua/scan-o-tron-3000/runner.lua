@@ -30,20 +30,36 @@ function M.run(opts)
   results.set_running(tree, scope.scope_leaf_names)
   signs.render(tree.bufnr, tree)
 
-  local cmd = adapter.build_command(scope)
+  local ok, err = pcall(function()
+    local cmd = adapter.build_command(scope)
 
-  system_fn(cmd, { text = true }, function(obj)
+    system_fn(cmd, { text = true }, function(obj)
+      in_flight[key] = nil
+
+      local parse_ok, parsed = pcall(adapter.parse_results, obj.stdout or "")
+      results.apply(tree, parse_ok and parsed or {}, scope.scope_leaf_names)
+      results.aggregate(tree)
+      signs.render(tree.bufnr, tree)
+
+      if opts.on_complete then
+        opts.on_complete()
+      end
+    end)
+  end)
+
+  if not ok then
     in_flight[key] = nil
 
-    local ok, parsed = pcall(adapter.parse_results, obj.stdout or "")
-    results.apply(tree, ok and parsed or {}, scope.scope_leaf_names)
+    results.apply(tree, {}, scope.scope_leaf_names)
     results.aggregate(tree)
     signs.render(tree.bufnr, tree)
+
+    vim.notify("scan-o-tron-3000: failed to start test run: " .. tostring(err), vim.log.levels.ERROR)
 
     if opts.on_complete then
       opts.on_complete()
     end
-  end)
+  end
 end
 
 return M

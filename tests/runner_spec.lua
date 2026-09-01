@@ -123,4 +123,55 @@ describe("scan-o-tron-3000.runner", function()
     assert.is_not_nil(notified)
     assert.are.equal(vim.log.levels.WARN, notified.level)
   end)
+
+  it("releases the in-flight guard and shows an errored state when system_fn throws synchronously", function()
+    local tree = make_tree()
+    local adapter = {
+      build_command = function()
+        return { "fake-cmd" }
+      end,
+      parse_results = function()
+        return {}
+      end,
+    }
+
+    local fake_system = function()
+      error("no such file or directory")
+    end
+
+    local notified
+    local original_notify = vim.notify
+    vim.notify = function(msg, level)
+      notified = { msg = msg, level = level }
+    end
+
+    runner.run({
+      tree = tree,
+      adapter = adapter,
+      scope = { kind = "file", path = "x", scope_leaf_names = { "passes" } },
+      system_fn = fake_system,
+    })
+
+    vim.notify = original_notify
+
+    assert.is_false(runner.is_running(tree.bufnr))
+    assert.are.equal("errored", tree.children[1].state)
+    assert.is_not_nil(notified)
+    assert.are.equal(vim.log.levels.ERROR, notified.level)
+
+    local run_count = 0
+    local fake_system_2 = function()
+      run_count = run_count + 1
+      return { pid = 1 }
+    end
+
+    runner.run({
+      tree = tree,
+      adapter = adapter,
+      scope = { kind = "file", path = "x", scope_leaf_names = { "passes" } },
+      system_fn = fake_system_2,
+    })
+
+    assert.are.equal(1, run_count)
+  end)
 end)
