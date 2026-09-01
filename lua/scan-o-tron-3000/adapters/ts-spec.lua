@@ -119,4 +119,34 @@ function M.build_command(scope)
   return append_scope_args(cmd, framework, scope)
 end
 
+local STATUS_MAP = { passed = "pass", failed = "fail", pending = "skip", skipped = "skip" }
+
+function M.parse_results(stdout)
+  local decoded = vim.json.decode(stdout)
+  local by_name = {}
+
+  if decoded.testResults then
+    -- jest/vitest shape
+    for _, file_result in ipairs(decoded.testResults) do
+      for _, assertion in ipairs(file_result.assertionResults or {}) do
+        by_name[assertion.title] = {
+          status = STATUS_MAP[assertion.status] or "fail",
+          message = assertion.failureMessages and assertion.failureMessages[1] or nil,
+        }
+      end
+    end
+  elseif decoded.tests then
+    -- mocha shape: each test has `err` populated (non-empty) only on failure
+    for _, test in ipairs(decoded.tests) do
+      local failed = next(test.err or {}) ~= nil
+      by_name[test.title] = {
+        status = failed and "fail" or "pass",
+        message = failed and test.err.message or nil,
+      }
+    end
+  end
+
+  return by_name
+end
+
 return M

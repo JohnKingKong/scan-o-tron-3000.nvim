@@ -86,4 +86,45 @@ describe("scan-o-tron-3000.adapters.ts-spec", function()
       )
     end)
   end)
+
+  describe("parse_results", function()
+    it("parses jest/vitest-shaped JSON output", function()
+      local stdout = vim.json.encode({
+        testResults = {
+          {
+            assertionResults = {
+              { ancestorTitles = { "outer" }, title = "passes", status = "passed" },
+              {
+                ancestorTitles = { "outer" },
+                title = "fails",
+                status = "failed",
+                failureMessages = { "expected 1 to be 2" },
+              },
+              { ancestorTitles = { "outer" }, title = "skipped", status = "pending" },
+            },
+          },
+        },
+      })
+
+      local parsed = ts_spec.parse_results(stdout)
+      assert.are.equal("pass", parsed["passes"].status)
+      assert.are.equal("fail", parsed["fails"].status)
+      assert.are.equal("expected 1 to be 2", parsed["fails"].message)
+      assert.are.equal("skip", parsed["skipped"].status)
+    end)
+
+    it("parses mocha-shaped JSON output", function()
+      local stdout = vim.json.encode({
+        tests = {
+          { title = "passes", fullTitle = "outer passes", err = vim.empty_dict() },
+          { title = "fails", fullTitle = "outer fails", err = { message = "expected 1 to be 2" } },
+        },
+      })
+
+      local parsed = ts_spec.parse_results(stdout)
+      assert.are.equal("pass", parsed["passes"].status)
+      assert.are.equal("fail", parsed["fails"].status)
+      assert.are.equal("expected 1 to be 2", parsed["fails"].message)
+    end)
+  end)
 end)
