@@ -156,6 +156,76 @@ describe("scan-o-tron-3000.init", function()
     vim.system = original_system
   end)
 
+  it(
+    "run_project() populates the panel for every file in the by-file breakdown, not just the current buffer",
+    function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_name(bufnr, "/tmp/fake_current.spec.ts")
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "line1", "line2", "line3", "line4" })
+      vim.api.nvim_set_current_buf(bufnr)
+
+      local captured_on_exit
+      local fake_adapter = {
+        name = "fake",
+        is_test_file = function(path)
+          return path:match("%.spec%.ts$") ~= nil
+        end,
+        treesitter_query = function()
+          return {
+            { type = "test", name = "some test", range = { 0, 0, 1, 0 } },
+          }
+        end,
+        build_command = function()
+          return { "fake-cmd" }
+        end,
+        parse_results = function()
+          return {
+            ["some test"] = { status = "pass" },
+          }, {
+            ["/tmp/fake_current.spec.ts"] = { ["some test"] = { status = "pass" } },
+            ["/tmp/fake_other.spec.ts"] = { ["some test"] = { status = "fail", message = "boom" } },
+          }
+        end,
+      }
+
+      scan.setup({ adapters = { fake_adapter } })
+
+      local original_system = vim.system
+      vim.system = function(_, _, on_exit)
+        captured_on_exit = on_exit
+        return { pid = 1 }
+      end
+
+      scan.run_project()
+      captured_on_exit({ code = 0, stdout = "{}" })
+      vim.wait(100, function()
+        local panel_bufnr = vim.api.nvim_win_get_buf(panel.winid())
+        local content = table.concat(vim.api.nvim_buf_get_lines(panel_bufnr, 0, -1, false), "\n")
+        return content:find("fake_other.spec.ts", 1, true) ~= nil
+      end)
+
+      vim.system = original_system
+
+      local panel_bufnr = vim.api.nvim_win_get_buf(panel.winid())
+      local content = table.concat(vim.api.nvim_buf_get_lines(panel_bufnr, 0, -1, false), "\n")
+
+      assert.is_true(content:find("fake_current.spec.ts", 1, true) ~= nil)
+      assert.is_true(content:find("fake_other.spec.ts", 1, true) ~= nil)
+
+      local other_bufnr = vim.fn.bufnr("/tmp/fake_other.spec.ts")
+      assert.is_true(other_bufnr ~= -1)
+      local marks = vim.api.nvim_buf_get_extmarks(
+        other_bufnr,
+        require("scan-o-tron-3000.signs").NAMESPACE,
+        0,
+        -1,
+        { details = true }
+      )
+      assert.are.equal(1, #marks)
+      assert.are.equal("ScanOTronFail", marks[1][4].sign_hl_group)
+    end
+  )
+
   it("run_nearest() resolves an enclosing describe as kind='suite' outside a nested test", function()
     local bufnr = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_name(bufnr, "/tmp/fake2.spec.ts")

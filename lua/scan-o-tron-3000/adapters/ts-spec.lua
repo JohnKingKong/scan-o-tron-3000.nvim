@@ -132,36 +132,55 @@ end
 
 local STATUS_MAP = { passed = "pass", failed = "fail", pending = "skip", skipped = "skip" }
 
+-- Returns two values: `by_name` (flat, single-namespace map used for the
+-- current file's own scoped run -- the long-standing name-only-matching
+-- limitation applies here) and `by_file` (the same entries additionally
+-- grouped by the file path each framework's JSON reporter attaches to every
+-- result), so a project-wide run can populate every tested file's panel
+-- entry and gutter marks, not just whichever file happens to be open.
 function M.parse_results(stdout)
   local decoded = vim.json.decode(stdout)
   local by_name = {}
+  local by_file = {}
 
   if decoded.testResults then
-    -- jest/vitest shape
+    -- jest/vitest shape: each entry's `name` is the absolute test file path.
     for _, file_result in ipairs(decoded.testResults) do
+      local file_map = {}
       for _, assertion in ipairs(file_result.assertionResults or {}) do
-        by_name[assertion.title] = {
+        local entry = {
           status = STATUS_MAP[assertion.status] or "fail",
           message = assertion.failureMessages and assertion.failureMessages[1] or nil,
         }
+        by_name[assertion.title] = entry
+        file_map[assertion.title] = entry
+      end
+      if file_result.name then
+        by_file[file_result.name] = file_map
       end
     end
   elseif decoded.tests then
-    -- mocha shape: each test has `err` populated (non-empty) only on failure
+    -- mocha shape: each test has `err` populated (non-empty) only on failure,
+    -- and carries its own absolute `file` path.
     for _, test in ipairs(decoded.tests) do
       local err = test.err
       if err == vim.NIL then
         err = nil
       end
       local failed = next(err or {}) ~= nil
-      by_name[test.title] = {
+      local entry = {
         status = failed and "fail" or "pass",
         message = failed and err.message or nil,
       }
+      by_name[test.title] = entry
+      if test.file then
+        by_file[test.file] = by_file[test.file] or {}
+        by_file[test.file][test.title] = entry
+      end
     end
   end
 
-  return by_name
+  return by_name, by_file
 end
 
 return M

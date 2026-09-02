@@ -37,7 +37,7 @@ function M.run(opts)
     system_fn(cmd, { text = true, cwd = cwd }, function(obj)
       in_flight[key] = nil
 
-      local parse_ok, parsed = pcall(adapter.parse_results, obj.stdout or "")
+      local parse_ok, parsed, by_file = pcall(adapter.parse_results, obj.stdout or "")
       results.apply(tree, parse_ok and parsed or {}, scope.scope_leaf_names)
       results.aggregate(tree)
 
@@ -47,7 +47,7 @@ function M.run(opts)
         signs.render(tree.bufnr, tree)
 
         if opts.on_complete then
-          opts.on_complete()
+          opts.on_complete(parse_ok and by_file or nil)
         end
       end)
     end)

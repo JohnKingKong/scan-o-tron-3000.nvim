@@ -3,6 +3,7 @@ local positions = require("scan-o-tron-3000.positions")
 local runner = require("scan-o-tron-3000.runner")
 local panel = require("scan-o-tron-3000.panel")
 local results = require("scan-o-tron-3000.results")
+local signs = require("scan-o-tron-3000.signs")
 
 local M = {}
 
@@ -47,6 +48,34 @@ local function find_nearest(node, row, best)
   return best
 end
 
+-- Populates every OTHER tested file's gutter marks and panel entry after a
+-- project-wide run -- `runner.run` only ever tracks the single tree it was
+-- given (the buffer open when the run was triggered), so without this, a
+-- project-wide run's results for every other file are silently discarded.
+local function populate_project_results(adapter, current_path, by_file)
+  for file_path, file_results in pairs(by_file) do
+    if vim.fs.normalize(file_path) ~= vim.fs.normalize(current_path) then
+      local ok, err = pcall(function()
+        local file_bufnr = vim.fn.bufadd(file_path)
+        vim.fn.bufload(file_bufnr)
+
+        local file_tree = positions.discover(file_bufnr, adapter)
+        local file_leaf_names = leaf_names(file_tree)
+        results.apply(file_tree, file_results, file_leaf_names)
+        results.aggregate(file_tree)
+        signs.render(file_bufnr, file_tree)
+        panel.update(file_path, file_tree)
+      end)
+      if not ok then
+        vim.notify(
+          "scan-o-tron-3000: failed to show results for " .. file_path .. ": " .. tostring(err),
+          vim.log.levels.WARN
+        )
+      end
+    end
+  end
+end
+
 local function run_scope(kind)
   local adapter, bufnr, path = adapter_for_current_buffer()
   if not adapter then
@@ -79,8 +108,11 @@ local function run_scope(kind)
     tree = tree,
     adapter = adapter,
     scope = scope,
-    on_complete = function()
+    on_complete = function(by_file)
       panel.update(path, tree)
+      if scope.kind == "project" and by_file then
+        populate_project_results(adapter, path, by_file)
+      end
     end,
   })
   panel.update(path, tree)

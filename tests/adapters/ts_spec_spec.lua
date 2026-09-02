@@ -158,5 +158,54 @@ describe("scan-o-tron-3000.adapters.ts-spec", function()
       assert.are.equal("pass", parsed["passes"].status)
       assert.is_nil(parsed["passes"].message)
     end)
+
+    it("also groups jest/vitest results by file, for project-wide runs spanning multiple files", function()
+      local stdout = vim.json.encode({
+        testResults = {
+          {
+            name = "/repo/a.spec.ts",
+            assertionResults = {
+              { ancestorTitles = {}, title = "a passes", status = "passed" },
+            },
+          },
+          {
+            name = "/repo/b.spec.ts",
+            assertionResults = {
+              { ancestorTitles = {}, title = "b fails", status = "failed", failureMessages = { "boom" } },
+            },
+          },
+        },
+      })
+
+      local by_name, by_file = ts_spec.parse_results(stdout)
+      assert.are.equal("pass", by_name["a passes"].status)
+      assert.are.equal("fail", by_name["b fails"].status)
+
+      assert.are.equal("pass", by_file["/repo/a.spec.ts"]["a passes"].status)
+      assert.are.equal("fail", by_file["/repo/b.spec.ts"]["b fails"].status)
+      assert.are.equal("boom", by_file["/repo/b.spec.ts"]["b fails"].message)
+      assert.is_nil(by_file["/repo/a.spec.ts"]["b fails"])
+    end)
+
+    it("also groups mocha results by each test's `file` field", function()
+      local stdout = vim.json.encode({
+        tests = {
+          { title = "a passes", fullTitle = "a passes", file = "/repo/a.spec.ts", err = vim.empty_dict() },
+          {
+            title = "b fails",
+            fullTitle = "b fails",
+            file = "/repo/b.spec.ts",
+            err = { message = "boom" },
+          },
+        },
+      })
+
+      local by_name, by_file = ts_spec.parse_results(stdout)
+      assert.are.equal("pass", by_name["a passes"].status)
+      assert.are.equal("fail", by_name["b fails"].status)
+
+      assert.are.equal("pass", by_file["/repo/a.spec.ts"]["a passes"].status)
+      assert.are.equal("fail", by_file["/repo/b.spec.ts"]["b fails"].status)
+    end)
   end)
 end)
