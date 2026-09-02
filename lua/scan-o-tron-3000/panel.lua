@@ -27,6 +27,13 @@ local function compute_force_expanded(node, parent_key, out, index)
   return out
 end
 
+local SPINNER_FRAMES = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
+local spinner = {
+  active = false,
+  frame = 1,
+  timer = nil,
+}
+
 function M.is_open()
   return state.winid ~= nil and vim.api.nvim_win_is_valid(state.winid)
 end
@@ -47,6 +54,11 @@ local function render()
   local lines = {}
   local line_to_node = {}
   local icon_highlights = {} -- { lnum, col_start, col_end, hl_group }
+
+  if spinner.active then
+    table.insert(lines, SPINNER_FRAMES[spinner.frame] .. " Running project tests...")
+    table.insert(lines, "")
+  end
 
   local function record_icon(depth, icon, node_state)
     local hl_group = signs.HL_GROUPS[node_state]
@@ -169,9 +181,20 @@ function M.open()
   do_open()
 end
 
-function M.update(path, tree)
+-- opts.default_collapsed, if true, starts a BRAND NEW file entry's root
+-- collapsed (matching describe blocks' default) instead of expanded --
+-- used for project-wide population, where hundreds of files at once would
+-- otherwise all show fully open. Only applies the first time a path is
+-- registered; a later re-run never overrides an already-set expand state
+-- (manual collapse/expand, or a prior failure) purely because of this flag.
+function M.update(path, tree, opts)
+  opts = opts or {}
   local existing = state.files[path]
   local expanded = existing and existing.expanded or {}
+
+  if not existing and opts.default_collapsed then
+    expanded[node_key("", tree)] = false
+  end
 
   local force = compute_force_expanded(tree, "", {})
   for key in pairs(force) do
@@ -180,6 +203,37 @@ function M.update(path, tree)
 
   state.files[path] = { tree = tree, expanded = expanded }
   render()
+end
+
+-- Toggles the animated "Running project tests..." header shown at the top
+-- of the panel while a project-wide run is in flight -- there's no per-file
+-- "running" state available for files we don't know about yet (we only
+-- learn which files ran once the whole subprocess finishes).
+function M.set_project_running(is_running)
+  if is_running == spinner.active then
+    return
+  end
+  spinner.active = is_running
+
+  if is_running then
+    spinner.frame = 1
+    spinner.timer = vim.uv.new_timer()
+    spinner.timer:start(
+      0,
+      100,
+      vim.schedule_wrap(function()
+        spinner.frame = (spinner.frame % #SPINNER_FRAMES) + 1
+        render()
+      end)
+    )
+  else
+    if spinner.timer then
+      spinner.timer:stop()
+      spinner.timer:close()
+      spinner.timer = nil
+    end
+    render()
+  end
 end
 
 return M

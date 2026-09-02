@@ -155,6 +155,47 @@ describe("scan-o-tron-3000.runner", function()
     assert.are.equal("pass", captured_by_file["/repo/a.spec.ts"]["passes"].status)
   end)
 
+  it("runs a project-wide scope with no tree at all, without crashing", function()
+    local adapter = {
+      build_command = function()
+        return { "fake-cmd" }
+      end,
+      parse_results = function()
+        return {}, { ["/repo/a.spec.ts"] = { passes = { status = "pass" } } }
+      end,
+    }
+
+    local captured_on_exit
+    local fake_system = function(_, _, on_exit)
+      captured_on_exit = on_exit
+      return { pid = 1 }
+    end
+
+    local captured_by_file
+    local ok = pcall(function()
+      runner.run({
+        tree = nil,
+        adapter = adapter,
+        scope = { kind = "project", path = "" },
+        system_fn = fake_system,
+        on_complete = function(by_file)
+          captured_by_file = by_file
+        end,
+      })
+    end)
+    assert.is_true(ok)
+
+    local exit_ok = pcall(captured_on_exit, { code = 0, stdout = "{}" })
+    assert.is_true(exit_ok)
+
+    vim.wait(100, function()
+      return captured_by_file ~= nil
+    end)
+
+    assert.is_not_nil(captured_by_file)
+    assert.are.equal("pass", captured_by_file["/repo/a.spec.ts"]["passes"].status)
+  end)
+
   it("no-ops and notifies when a run is already in flight for the same buffer", function()
     local tree = make_tree()
     local adapter = {

@@ -9,6 +9,10 @@ describe("scan-o-tron-3000.panel", function()
   end)
 
   after_each(function()
+    -- set_project_running(true) starts a real libuv timer; package.loaded
+    -- resetting the module doesn't stop it, so a test that leaves it running
+    -- would leak a live timer into every later test unless we stop it here.
+    panel.set_project_running(false)
     if panel.is_open() then
       panel.toggle()
     end
@@ -54,6 +58,93 @@ describe("scan-o-tron-3000.panel", function()
 
     assert.is_true(content:find("foo.spec.ts", 1, true) ~= nil)
     assert.is_true(content:find("does a thing", 1, true) ~= nil)
+  end)
+
+  it("update() with default_collapsed starts a brand new file's root collapsed, hiding its tests", function()
+    panel.toggle()
+    local tree = positions.build_tree({ { type = "test", name = "does a thing", range = { 0, 0, 1, 0 } } })
+    tree.children[1].state = "pass"
+    panel.update("src/foo.spec.ts", tree, { default_collapsed = true })
+
+    local bufnr = vim.api.nvim_win_get_buf(panel.winid())
+    local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+
+    assert.is_true(content:find("foo.spec.ts", 1, true) ~= nil)
+    assert.is_true(content:find("does a thing", 1, true) == nil)
+  end)
+
+  it("update() with default_collapsed still auto-expands a file whose tests are failing", function()
+    panel.toggle()
+    local tree = positions.build_tree({ { type = "test", name = "broken", range = { 0, 0, 1, 0 } } })
+    tree.children[1].state = "fail"
+    tree.state = "fail"
+    panel.update("src/foo.spec.ts", tree, { default_collapsed = true })
+
+    local bufnr = vim.api.nvim_win_get_buf(panel.winid())
+    local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+
+    assert.is_true(content:find("broken", 1, true) ~= nil)
+  end)
+
+  it("update() with default_collapsed does not re-collapse a file the user already expanded manually", function()
+    panel.toggle()
+
+    local function buffer_content()
+      local bufnr = vim.api.nvim_win_get_buf(panel.winid())
+      return table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+    end
+
+    local tree1 = positions.build_tree({ { type = "test", name = "does a thing", range = { 0, 0, 1, 0 } } })
+    tree1.children[1].state = "pass"
+    panel.update("src/foo.spec.ts", tree1, { default_collapsed = true })
+    assert.is_true(buffer_content():find("does a thing", 1, true) == nil)
+
+    local bufnr = vim.api.nvim_win_get_buf(panel.winid())
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local target_lnum
+    for i, line in ipairs(lines) do
+      if line:find("foo.spec.ts", 1, true) then
+        target_lnum = i
+        break
+      end
+    end
+    vim.api.nvim_win_set_cursor(panel.winid(), { target_lnum, 0 })
+    local cr_callback
+    for _, km in ipairs(vim.api.nvim_buf_get_keymap(bufnr, "n")) do
+      if km.lhs == "<CR>" then
+        cr_callback = km.callback
+        break
+      end
+    end
+    cr_callback()
+    assert.is_true(buffer_content():find("does a thing", 1, true) ~= nil)
+
+    local tree2 = positions.build_tree({ { type = "test", name = "does a thing", range = { 0, 0, 1, 0 } } })
+    tree2.children[1].state = "pass"
+    panel.update("src/foo.spec.ts", tree2, { default_collapsed = true })
+
+    assert.is_true(buffer_content():find("does a thing", 1, true) ~= nil)
+  end)
+
+  it("set_project_running(true) shows an animated header while a project run is in flight", function()
+    panel.toggle()
+    panel.set_project_running(true)
+
+    local bufnr = vim.api.nvim_win_get_buf(panel.winid())
+    vim.wait(50)
+    local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+    assert.is_true(content:find("Running project tests", 1, true) ~= nil)
+  end)
+
+  it("set_project_running(false) removes the header", function()
+    panel.toggle()
+    panel.set_project_running(true)
+    vim.wait(50)
+    panel.set_project_running(false)
+
+    local bufnr = vim.api.nvim_win_get_buf(panel.winid())
+    local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+    assert.is_true(content:find("Running project tests", 1, true) == nil)
   end)
 
   it("renders the fail icon on the file-level row when the root node's state is fail", function()

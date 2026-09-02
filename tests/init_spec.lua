@@ -21,6 +21,9 @@ describe("scan-o-tron-3000.init", function()
     -- run_nearest()/run_file()/run_project() now auto-open the panel; close
     -- any real window a test left behind so it doesn't leak into the next
     -- test (a lingering vsplit would also steal "current window" focus).
+    -- set_project_running(true) also starts a real libuv timer that must be
+    -- stopped explicitly -- resetting package.loaded doesn't stop it.
+    panel.set_project_running(false)
     if panel.is_open() then
       panel.toggle()
     end
@@ -328,5 +331,63 @@ describe("scan-o-tron-3000.init", function()
     assert.is_not_nil(captured_scope)
     assert.are.equal("suite", captured_scope.kind)
     assert.are.equal("outer", captured_scope.position.name)
+  end)
+
+  it("run_project() runs and populates the panel even when the current buffer is not a spec file", function()
+    local bufnr = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_name(bufnr, "/tmp/README.md")
+    vim.api.nvim_set_current_buf(bufnr)
+
+    local captured_command
+    local captured_on_exit
+    local fake_adapter = {
+      name = "fake",
+      is_test_file = function(path)
+        return path:match("%.spec%.ts$") ~= nil
+      end,
+      treesitter_query = function()
+        return { { type = "test", name = "some test", range = { 0, 0, 1, 0 } } }
+      end,
+      build_command = function(scope)
+        captured_command = scope
+        return { "fake-cmd" }
+      end,
+      parse_results = function()
+        return {}, {
+          ["/tmp/fake_a.spec.ts"] = { ["a"] = { status = "pass" } },
+          ["/tmp/fake_b.spec.ts"] = { ["b"] = { status = "fail" } },
+        }
+      end,
+    }
+
+    scan.setup({ adapters = { fake_adapter } })
+
+    local original_system = vim.system
+    vim.system = function(_, _, on_exit)
+      captured_on_exit = on_exit
+      return { pid = 1 }
+    end
+
+    scan.run_project()
+
+    assert.is_not_nil(captured_command)
+    assert.are.equal("project", captured_command.kind)
+
+    captured_on_exit({ code = 0, stdout = "{}" })
+    vim.wait(100, function()
+      local panel_bufnr = vim.api.nvim_win_get_buf(panel.winid())
+      local content = table.concat(vim.api.nvim_buf_get_lines(panel_bufnr, 0, -1, false), "\n")
+      return content:find("fake_b.spec.ts", 1, true) ~= nil
+    end)
+
+    vim.system = original_system
+
+    local panel_bufnr = vim.api.nvim_win_get_buf(panel.winid())
+    local content = table.concat(vim.api.nvim_buf_get_lines(panel_bufnr, 0, -1, false), "\n")
+
+    assert.is_true(content:find("fake_a.spec.ts", 1, true) ~= nil)
+    assert.is_true(content:find("fake_b.spec.ts", 1, true) ~= nil)
+    -- README.md was never a test file, so it must never show up as its own entry.
+    assert.is_true(content:find("README.md", 1, true) == nil)
   end)
 end)

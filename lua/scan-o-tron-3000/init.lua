@@ -22,6 +22,19 @@ local function adapter_for_current_buffer()
   return nil
 end
 
+-- Project-wide runs aren't tied to any one file, so unlike the single-file
+-- scopes this prefers the current buffer's adapter (matching existing
+-- behavior when it happens to be a test file) but falls back to whatever's
+-- configured first rather than refusing to run.
+local function pick_project_adapter(path)
+  for _, adapter in ipairs(config.get().adapters) do
+    if path ~= "" and adapter.is_test_file(path) then
+      return adapter
+    end
+  end
+  return config.get().adapters[1]
+end
+
 local function leaf_names(node, out)
   out = out or {}
   if node.type == "test" then
@@ -33,8 +46,12 @@ local function leaf_names(node, out)
   return out
 end
 
+local function find_package_json_from_dir(dir)
+  return vim.fs.find("package.json", { path = dir, upward = true })[1]
+end
+
 local function find_package_json(path)
-  return vim.fs.find("package.json", { path = vim.fs.dirname(path), upward = true })[1]
+  return find_package_json_from_dir(vim.fs.dirname(path))
 end
 
 local function find_nearest(node, row, best)
@@ -50,8 +67,10 @@ end
 
 -- Populates every OTHER tested file's gutter marks and panel entry after a
 -- project-wide run -- `runner.run` only ever tracks the single tree it was
--- given (the buffer open when the run was triggered), so without this, a
--- project-wide run's results for every other file are silently discarded.
+-- given (the buffer open when the run was triggered, if any), so without
+-- this, a project-wide run's results for every other file are silently
+-- discarded. Each file starts collapsed (unless failing) since a project run
+-- can easily touch hundreds of files at once.
 local function populate_project_results(adapter, current_path, by_file)
   for file_path, file_results in pairs(by_file) do
     if vim.fs.normalize(file_path) ~= vim.fs.normalize(current_path) then
@@ -64,7 +83,7 @@ local function populate_project_results(adapter, current_path, by_file)
         results.apply(file_tree, file_results, file_leaf_names)
         results.aggregate(file_tree)
         signs.render(file_bufnr, file_tree)
-        panel.update(file_path, file_tree)
+        panel.update(file_path, file_tree, { default_collapsed = true })
       end)
       if not ok then
         vim.notify(
@@ -122,30 +141,12 @@ local function run_scope(kind)
 
   results.aggregate(tree)
   panel.open()
-
-  if scope.kind == "project" then
-    vim.notify("scan-o-tron-3000: running project tests...", vim.log.levels.INFO)
-  end
-
   runner.run({
     tree = tree,
     adapter = adapter,
     scope = scope,
-    on_complete = function(by_file)
+    on_complete = function()
       panel.update(path, tree)
-      if scope.kind == "project" and by_file then
-        populate_project_results(adapter, path, by_file)
-        local total, passed, failed = count_results(by_file)
-        vim.notify(
-          string.format(
-            "scan-o-tron-3000: project run complete -- %d passed, %d failed (%d total)",
-            passed,
-            failed,
-            total
-          ),
-          failed > 0 and vim.log.levels.WARN or vim.log.levels.INFO
-        )
-      end
     end,
   })
   panel.update(path, tree)
@@ -159,8 +160,66 @@ function M.run_file()
   run_scope("file")
 end
 
+-- Deliberately does NOT require the current buffer to be a test file --
+-- project-wide runs every test in the project regardless of what you
+-- happen to have open.
 function M.run_project()
-  run_scope("project")
+  local bufnr = vim.api.nvim_get_current_buf()
+  local path = vim.api.nvim_buf_get_name(bufnr)
+  local adapter = pick_project_adapter(path)
+  if not adapter then
+    vim.notify("scan-o-tron-3000: no adapter registered", vim.log.levels.WARN)
+    return
+  end
+
+  local is_spec_file = path ~= "" and adapter.is_test_file(path)
+  local start_dir = (path ~= "" and vim.fs.dirname(path)) or vim.fn.getcwd()
+  local package_json_path = find_package_json_from_dir(start_dir)
+
+  local tree = is_spec_file and positions.discover(bufnr, adapter) or nil
+  local scope = {
+    kind = "project",
+    path = path,
+    package_json_path = package_json_path,
+    scope_leaf_names = tree and leaf_names(tree) or {},
+  }
+
+  if tree then
+    results.aggregate(tree)
+  end
+
+  panel.open()
+  panel.set_project_running(true)
+  vim.notify("scan-o-tron-3000: running project tests...", vim.log.levels.INFO)
+
+  runner.run({
+    tree = tree,
+    adapter = adapter,
+    scope = scope,
+    on_complete = function(by_file)
+      if tree then
+        panel.update(path, tree, { default_collapsed = true })
+      end
+      if by_file then
+        populate_project_results(adapter, path, by_file)
+        local total, passed, failed = count_results(by_file)
+        vim.notify(
+          string.format(
+            "scan-o-tron-3000: project run complete -- %d passed, %d failed (%d total)",
+            passed,
+            failed,
+            total
+          ),
+          failed > 0 and vim.log.levels.WARN or vim.log.levels.INFO
+        )
+      end
+      panel.set_project_running(false)
+    end,
+  })
+
+  if tree then
+    panel.update(path, tree, { default_collapsed = true })
+  end
 end
 
 function M.toggle_panel()

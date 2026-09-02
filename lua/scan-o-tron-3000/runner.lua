@@ -13,6 +13,10 @@ function M.is_running(key)
   return in_flight[key] == true
 end
 
+-- `tree` is optional: a project-wide run triggered from a buffer that isn't
+-- itself a recognized test file has no single tree to track (results for
+-- every file are applied separately via on_complete's by_file breakdown), so
+-- every tree-touching step here is skipped when it's nil.
 function M.run(opts)
   local tree = opts.tree
   local adapter = opts.adapter
@@ -27,8 +31,10 @@ function M.run(opts)
 
   in_flight[key] = true
 
-  results.set_running(tree, scope.scope_leaf_names)
-  signs.render(tree.bufnr, tree)
+  if tree then
+    results.set_running(tree, scope.scope_leaf_names)
+    signs.render(tree.bufnr, tree)
+  end
 
   local ok, err = pcall(function()
     local cmd = adapter.build_command(scope)
@@ -38,13 +44,17 @@ function M.run(opts)
       in_flight[key] = nil
 
       local parse_ok, parsed, by_file = pcall(adapter.parse_results, obj.stdout or "")
-      results.apply(tree, parse_ok and parsed or {}, scope.scope_leaf_names)
-      results.aggregate(tree)
+      if tree then
+        results.apply(tree, parse_ok and parsed or {}, scope.scope_leaf_names)
+        results.aggregate(tree)
+      end
 
       -- vim.system's on_exit runs in a fast-event (libuv) context, where
       -- nvim_buf_*/nvim_win_* calls are illegal; defer them to the main loop.
       vim.schedule(function()
-        signs.render(tree.bufnr, tree)
+        if tree then
+          signs.render(tree.bufnr, tree)
+        end
 
         if opts.on_complete then
           opts.on_complete(parse_ok and by_file or nil)
@@ -56,9 +66,11 @@ function M.run(opts)
   if not ok then
     in_flight[key] = nil
 
-    results.apply(tree, {}, scope.scope_leaf_names)
-    results.aggregate(tree)
-    signs.render(tree.bufnr, tree)
+    if tree then
+      results.apply(tree, {}, scope.scope_leaf_names)
+      results.aggregate(tree)
+      signs.render(tree.bufnr, tree)
+    end
 
     vim.notify("scan-o-tron-3000: failed to start test run: " .. tostring(err), vim.log.levels.ERROR)
 
