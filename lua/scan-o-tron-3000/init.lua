@@ -76,6 +76,24 @@ local function populate_project_results(adapter, current_path, by_file)
   end
 end
 
+-- Counts pass/fail/total across every file's results, for the project-run
+-- completion notify -- there's no other way to tell a long project-wide run
+-- actually finished besides watching the current file's icon change.
+local function count_results(by_file)
+  local total, passed, failed = 0, 0, 0
+  for _, file_results in pairs(by_file) do
+    for _, result in pairs(file_results) do
+      total = total + 1
+      if result.status == "pass" then
+        passed = passed + 1
+      elseif result.status == "fail" then
+        failed = failed + 1
+      end
+    end
+  end
+  return total, passed, failed
+end
+
 local function run_scope(kind)
   local adapter, bufnr, path = adapter_for_current_buffer()
   if not adapter then
@@ -104,6 +122,11 @@ local function run_scope(kind)
 
   results.aggregate(tree)
   panel.open()
+
+  if scope.kind == "project" then
+    vim.notify("scan-o-tron-3000: running project tests...", vim.log.levels.INFO)
+  end
+
   runner.run({
     tree = tree,
     adapter = adapter,
@@ -112,6 +135,16 @@ local function run_scope(kind)
       panel.update(path, tree)
       if scope.kind == "project" and by_file then
         populate_project_results(adapter, path, by_file)
+        local total, passed, failed = count_results(by_file)
+        vim.notify(
+          string.format(
+            "scan-o-tron-3000: project run complete -- %d passed, %d failed (%d total)",
+            passed,
+            failed,
+            total
+          ),
+          failed > 0 and vim.log.levels.WARN or vim.log.levels.INFO
+        )
       end
     end,
   })

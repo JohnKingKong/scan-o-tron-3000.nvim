@@ -226,6 +226,65 @@ describe("scan-o-tron-3000.init", function()
     end
   )
 
+  it("run_project() notifies when the run starts and again with a pass/fail summary on completion", function()
+    local bufnr = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_name(bufnr, "/tmp/fake_notify.spec.ts")
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "line1", "line2" })
+    vim.api.nvim_set_current_buf(bufnr)
+
+    local captured_on_exit
+    local fake_adapter = {
+      name = "fake",
+      is_test_file = function(path)
+        return path:match("%.spec%.ts$") ~= nil
+      end,
+      treesitter_query = function()
+        return { { type = "test", name = "some test", range = { 0, 0, 1, 0 } } }
+      end,
+      build_command = function()
+        return { "fake-cmd" }
+      end,
+      parse_results = function()
+        return { ["some test"] = { status = "pass" } }, {
+          ["/tmp/fake_notify.spec.ts"] = { ["some test"] = { status = "pass" } },
+          ["/tmp/fake_other2.spec.ts"] = { ["a"] = { status = "pass" }, ["b"] = { status = "fail" } },
+        }
+      end,
+    }
+
+    scan.setup({ adapters = { fake_adapter } })
+
+    local original_system = vim.system
+    vim.system = function(_, _, on_exit)
+      captured_on_exit = on_exit
+      return { pid = 1 }
+    end
+
+    local notifications = {}
+    local original_notify = vim.notify
+    vim.notify = function(msg, level)
+      table.insert(notifications, { msg = msg, level = level })
+    end
+
+    scan.run_project()
+
+    assert.are.equal(1, #notifications)
+    assert.is_true(notifications[1].msg:find("running project tests", 1, true) ~= nil)
+
+    captured_on_exit({ code = 0, stdout = "{}" })
+    vim.wait(100, function()
+      return #notifications >= 2
+    end)
+
+    vim.notify = original_notify
+    vim.system = original_system
+
+    assert.are.equal(2, #notifications)
+    -- 1 pass (this file) + 1 pass + 1 fail (the other file) = 2 passed, 1 failed, 3 total
+    assert.is_true(notifications[2].msg:find("2 passed, 1 failed", 1, true) ~= nil)
+    assert.are.equal(vim.log.levels.WARN, notifications[2].level)
+  end)
+
   it("run_nearest() resolves an enclosing describe as kind='suite' outside a nested test", function()
     local bufnr = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_name(bufnr, "/tmp/fake2.spec.ts")
