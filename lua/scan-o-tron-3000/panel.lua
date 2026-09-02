@@ -156,7 +156,7 @@ local function do_open()
     vim.keymap.set("n", "<CR>", on_confirm, { buffer = state.bufnr, silent = true })
   end
 
-  vim.cmd("vsplit")
+  vim.cmd("botright split")
   state.winid = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(state.winid, state.bufnr)
 
