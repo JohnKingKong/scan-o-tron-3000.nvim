@@ -42,6 +42,33 @@ describe("scan-o-tron-3000.adapters.ts-spec", function()
 
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
+
+    it("discovers describe/it nodes in a real .tsx fixture using the 'tsx' grammar, not 'typescript'", function()
+      -- Regression test: using the plain "typescript" tree-sitter grammar on
+      -- real .tsx content can corrupt the parse tree badly enough to lose
+      -- ALL describe/it matches (confirmed against real-world fixtures --
+      -- some react-testing-library patterns swallow the entire file into
+      -- one ERROR node under the wrong grammar), even though it "happens to
+      -- work" on simpler .tsx files. The fixture below reproduces exactly
+      -- that failure unless the correct "tsx" grammar is used.
+      local bufnr = vim.fn.bufadd("tests/fixtures/example.spec.tsx")
+      vim.fn.bufload(bufnr)
+      vim.bo[bufnr].filetype = "typescriptreact"
+
+      local flat = ts_spec.treesitter_query(bufnr)
+
+      local names = {}
+      for _, pos in ipairs(flat) do
+        table.insert(names, pos.type .. ":" .. pos.name)
+      end
+
+      assert.is_true(vim.tbl_contains(names, "describe:Widget"))
+      assert.is_true(vim.tbl_contains(names, "test:renders nothing when there is no data"))
+      assert.is_true(vim.tbl_contains(names, "describe:themed"))
+      assert.is_true(vim.tbl_contains(names, "test:applies the selected theme"))
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
   end)
 
   describe("detect_framework", function()

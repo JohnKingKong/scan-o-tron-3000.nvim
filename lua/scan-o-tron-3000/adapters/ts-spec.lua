@@ -22,11 +22,22 @@ local QUERY = [[
     [(arrow_function) (function_expression)])) @test.definition
 ]]
 
+-- .tsx files need the separate "tsx" tree-sitter grammar, not "typescript" --
+-- the plain typescript grammar doesn't understand JSX and produces a parse
+-- tree with errors on real .tsx content (tree-sitter's error recovery can
+-- paper over this for some files, silently corrupt describe/it discovery on
+-- others, so this can't be left to luck).
+local LANGUAGE_FOR_FILETYPE = {
+  typescript = "typescript",
+  typescriptreact = "tsx",
+}
+
 function M.treesitter_query(bufnr)
-  local parser = vim.treesitter.get_parser(bufnr, "typescript")
+  local lang = LANGUAGE_FOR_FILETYPE[vim.bo[bufnr].filetype] or "typescript"
+  local parser = vim.treesitter.get_parser(bufnr, lang)
   local tree = parser:parse()[1]
   local root = tree:root()
-  local query = vim.treesitter.query.parse("typescript", QUERY)
+  local query = vim.treesitter.query.parse(lang, QUERY)
 
   local flat = {}
   for _, match, _ in query:iter_matches(root, bufnr, 0, -1, { all = true }) do
