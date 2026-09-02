@@ -184,6 +184,23 @@ function M.run_project()
     scope_leaf_names = tree and leaf_names(tree) or {},
   }
 
+  -- Fail fast, before opening anything, if this package.json has no
+  -- detectable test framework -- a monorepo root's package.json is often
+  -- just workspace tooling, with the real framework declared in a
+  -- workspace/app subdirectory instead. No auto-detection across
+  -- workspaces: which app "project-wide" should mean is genuinely
+  -- ambiguous when there's more than one, so this asks rather than guesses.
+  local build_ok = pcall(adapter.build_command, scope)
+  if not build_ok then
+    vim.notify(
+      "scan-o-tron-3000: couldn't detect a test framework in "
+        .. tostring(package_json_path)
+        .. " -- open a file inside the app you want to test, or :cd into it first",
+      vim.log.levels.WARN
+    )
+    return
+  end
+
   if tree then
     results.aggregate(tree)
   end

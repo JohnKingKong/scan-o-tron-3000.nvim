@@ -390,4 +390,58 @@ describe("scan-o-tron-3000.init", function()
     -- README.md was never a test file, so it must never show up as its own entry.
     assert.is_true(content:find("README.md", 1, true) == nil)
   end)
+
+  it(
+    "run_project() fails fast with a clear message when build_command can't detect a framework (e.g. a monorepo root)",
+    function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_name(bufnr, "/tmp/monorepo-root/package.json")
+      vim.api.nvim_set_current_buf(bufnr)
+
+      local build_command_called = false
+      local system_called = false
+      local fake_adapter = {
+        name = "fake",
+        is_test_file = function(path)
+          return path:match("%.spec%.ts$") ~= nil
+        end,
+        treesitter_query = function()
+          return {}
+        end,
+        build_command = function()
+          build_command_called = true
+          error("scan-o-tron-3000: could not detect vitest/jest/mocha from /tmp/monorepo-root/package.json")
+        end,
+        parse_results = function()
+          return {}
+        end,
+      }
+
+      scan.setup({ adapters = { fake_adapter } })
+
+      local original_system = vim.system
+      vim.system = function()
+        system_called = true
+        return { pid = 1 }
+      end
+
+      local notified
+      local original_notify = vim.notify
+      vim.notify = function(msg, level)
+        notified = { msg = msg, level = level }
+      end
+
+      scan.run_project()
+
+      vim.notify = original_notify
+      vim.system = original_system
+
+      assert.is_true(build_command_called)
+      assert.is_false(system_called)
+      assert.is_false(panel.is_open())
+      assert.is_not_nil(notified)
+      assert.are.equal(vim.log.levels.WARN, notified.level)
+      assert.is_true(notified.msg:find("open a file inside the app you want to test", 1, true) ~= nil)
+    end
+  )
 end)
