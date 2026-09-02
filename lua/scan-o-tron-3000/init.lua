@@ -239,6 +239,80 @@ function M.run_project()
   end
 end
 
+-- Runs every test under an arbitrary path -- a file explorer's node, not
+-- necessarily anything open in a buffer. A file runs just that file; a
+-- directory runs everything recursively beneath it (jest/vitest/mocha all
+-- treat a bare positional path as a substring match against the full test
+-- file path, so a directory works exactly like a file argument here, no
+-- separate "directory" scope kind needed). A file that no adapter
+-- recognizes silently does nothing -- there is no action to offer for it.
+function M.run_path(target_path)
+  local is_dir = vim.fn.isdirectory(target_path) == 1
+
+  local adapter
+  if is_dir then
+    adapter = config.get().adapters[1]
+  else
+    for _, candidate in ipairs(config.get().adapters) do
+      if candidate.is_test_file(target_path) then
+        adapter = candidate
+        break
+      end
+    end
+    if not adapter then
+      return
+    end
+  end
+
+  if not adapter then
+    vim.notify("scan-o-tron-3000: no adapter registered", vim.log.levels.WARN)
+    return
+  end
+
+  local start_dir = is_dir and target_path or vim.fs.dirname(target_path)
+  local package_json_path = find_package_json_from_dir(start_dir)
+
+  local scope = { kind = "file", path = target_path, package_json_path = package_json_path }
+
+  local build_ok = pcall(adapter.build_command, scope)
+  if not build_ok then
+    vim.notify(
+      "scan-o-tron-3000: couldn't detect a test framework in "
+        .. tostring(package_json_path)
+        .. " -- open a file inside the app you want to test, or :cd into it first",
+      vim.log.levels.WARN
+    )
+    return
+  end
+
+  panel.open()
+  panel.set_project_running(true)
+  vim.notify("scan-o-tron-3000: running tests under " .. target_path .. "...", vim.log.levels.INFO)
+
+  runner.run({
+    tree = nil,
+    adapter = adapter,
+    scope = scope,
+    on_complete = function(by_file)
+      if by_file then
+        populate_project_results(adapter, "", by_file)
+        local total, passed, failed = count_results(by_file)
+        vim.notify(
+          string.format(
+            "scan-o-tron-3000: run complete for %s -- %d passed, %d failed (%d total)",
+            target_path,
+            passed,
+            failed,
+            total
+          ),
+          failed > 0 and vim.log.levels.WARN or vim.log.levels.INFO
+        )
+      end
+      panel.set_project_running(false)
+    end,
+  })
+end
+
 function M.toggle_panel()
   panel.toggle()
 end

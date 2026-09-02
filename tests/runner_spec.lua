@@ -196,6 +196,62 @@ describe("scan-o-tron-3000.runner", function()
     assert.are.equal("pass", captured_by_file["/repo/a.spec.ts"]["passes"].status)
   end)
 
+  it(
+    "keys a tree-less, non-project scope by its path -- different paths don't block each other, the same path does",
+    function()
+      local adapter = {
+        build_command = function()
+          return { "fake-cmd" }
+        end,
+        parse_results = function()
+          return {}
+        end,
+      }
+
+      local run_count = 0
+      local fake_system = function()
+        run_count = run_count + 1
+        return { pid = 1 }
+      end
+
+      local ok = pcall(function()
+        runner.run({
+          tree = nil,
+          adapter = adapter,
+          scope = { kind = "file", path = "/repo/a" },
+          system_fn = fake_system,
+        })
+        runner.run({
+          tree = nil,
+          adapter = adapter,
+          scope = { kind = "file", path = "/repo/b" },
+          system_fn = fake_system,
+        })
+      end)
+      assert.is_true(ok)
+      assert.are.equal(2, run_count)
+
+      local notified
+      local original_notify = vim.notify
+      vim.notify = function(msg, level)
+        notified = { msg = msg, level = level }
+      end
+
+      runner.run({
+        tree = nil,
+        adapter = adapter,
+        scope = { kind = "file", path = "/repo/a" },
+        system_fn = fake_system,
+      })
+
+      vim.notify = original_notify
+
+      assert.are.equal(2, run_count)
+      assert.is_not_nil(notified)
+      assert.are.equal(vim.log.levels.WARN, notified.level)
+    end
+  )
+
   it("no-ops and notifies when a run is already in flight for the same buffer", function()
     local tree = make_tree()
     local adapter = {

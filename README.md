@@ -92,11 +92,39 @@ No default keymaps are shipped — bind the ones you want, e.g. the `keys` block
 
 ---
 
+## Integrations
+
+`require("scan-o-tron-3000").run_path(path)` runs every test under an arbitrary path — a specific spec file, or a directory (run recursively). It isn't tied to any open buffer, so it's meant to be wired into a file explorer's own keymap. For [neo-tree.nvim](https://github.com/nvim-neo-tree/neo-tree.nvim):
+
+```lua
+-- ~/.config/nvim/lua/plugins/neo-tree.lua
+return {
+  "nvim-neo-tree/neo-tree.nvim",
+  opts = {
+    window = {
+      mappings = {
+        ["<leader>tr"] = {
+          function(state)
+            local node = state.tree:get_node()
+            require("scan-o-tron-3000").run_path(node.path)
+          end,
+          desc = "Run tests at this path",
+        },
+      },
+    },
+  },
+}
+```
+
+A file `run_path` doesn't recognize (anything other adapter's `is_test_file` rejects) silently does nothing — there's no action to offer for it.
+
+---
+
 ## Architecture
 
 The plugin is split into small, single-purpose modules:
 
-**`lua/scan-o-tron-3000/init.lua`** — the public API: `setup()`, `run_nearest()`, `run_file()`, `run_project()`, `toggle_panel()`; resolves the adapter and cursor-scoped position for a run
+**`lua/scan-o-tron-3000/init.lua`** — the public API: `setup()`, `run_nearest()`, `run_file()`, `run_project()`, `run_path(path)`, `toggle_panel()`; resolves the adapter and cursor-scoped position for a run
 
 **`lua/scan-o-tron-3000/config.lua`** — defaults and `setup()`/`get()` for the registered adapters list
 

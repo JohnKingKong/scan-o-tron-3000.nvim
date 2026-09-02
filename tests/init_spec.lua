@@ -444,4 +444,112 @@ describe("scan-o-tron-3000.init", function()
       assert.is_true(notified.msg:find("open a file inside the app you want to test", 1, true) ~= nil)
     end
   )
+
+  it("run_path() runs a specific spec file passed by an external caller (e.g. a file tree)", function()
+    local captured_scope
+    local fake_adapter = {
+      name = "fake",
+      is_test_file = function(path)
+        return path:match("%.spec%.ts$") ~= nil
+      end,
+      build_command = function(scope)
+        captured_scope = scope
+        return { "fake-cmd" }
+      end,
+      parse_results = function()
+        return {}, {}
+      end,
+    }
+
+    scan.setup({ adapters = { fake_adapter } })
+
+    local original_system = vim.system
+    vim.system = function(_, _, on_exit)
+      on_exit({ code = 0, stdout = "{}" })
+      return { pid = 1 }
+    end
+
+    scan.run_path("/tmp/some-dir/foo.spec.ts")
+
+    vim.system = original_system
+
+    assert.is_not_nil(captured_scope)
+    assert.are.equal("file", captured_scope.kind)
+    assert.are.equal("/tmp/some-dir/foo.spec.ts", captured_scope.path)
+  end)
+
+  it("run_path() runs everything under a directory (no name filter, path passed as-is)", function()
+    local captured_scope
+    local fake_adapter = {
+      name = "fake",
+      is_test_file = function(path)
+        return path:match("%.spec%.ts$") ~= nil
+      end,
+      build_command = function(scope)
+        captured_scope = scope
+        return { "fake-cmd" }
+      end,
+      parse_results = function()
+        return {}, {}
+      end,
+    }
+
+    scan.setup({ adapters = { fake_adapter } })
+
+    local original_system = vim.system
+    vim.system = function(_, _, on_exit)
+      on_exit({ code = 0, stdout = "{}" })
+      return { pid = 1 }
+    end
+
+    scan.run_path(vim.fn.getcwd()) -- a real directory that exists on disk
+
+    vim.system = original_system
+
+    assert.is_not_nil(captured_scope)
+    assert.are.equal("file", captured_scope.kind)
+    assert.are.equal(vim.fn.getcwd(), captured_scope.path)
+  end)
+
+  it("run_path() silently does nothing for a file no adapter recognizes", function()
+    local build_command_called = false
+    local system_called = false
+    local fake_adapter = {
+      name = "fake",
+      is_test_file = function(path)
+        return path:match("%.spec%.ts$") ~= nil
+      end,
+      build_command = function()
+        build_command_called = true
+        return { "fake-cmd" }
+      end,
+      parse_results = function()
+        return {}
+      end,
+    }
+
+    scan.setup({ adapters = { fake_adapter } })
+
+    local original_system = vim.system
+    vim.system = function()
+      system_called = true
+      return { pid = 1 }
+    end
+
+    local notified = false
+    local original_notify = vim.notify
+    vim.notify = function()
+      notified = true
+    end
+
+    scan.run_path("/tmp/some-dir/not-a-test.png")
+
+    vim.notify = original_notify
+    vim.system = original_system
+
+    assert.is_false(build_command_called)
+    assert.is_false(system_called)
+    assert.is_false(notified)
+    assert.is_false(panel.is_open())
+  end)
 end)

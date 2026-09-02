@@ -5,8 +5,15 @@ local M = {}
 
 local in_flight = {}
 
+-- A tree-less non-project scope (e.g. a run triggered from a file tree
+-- sidebar rather than an open buffer) has no tree.bufnr to key on -- falls
+-- back to the scope's own path instead, so two different tree-less runs at
+-- different paths don't block each other, while the same path still does.
 local function key_for(tree, scope)
-  return scope.kind == "project" and "project" or tree.bufnr
+  if scope.kind == "project" then
+    return "project"
+  end
+  return tree and tree.bufnr or scope.path
 end
 
 function M.is_running(key)
