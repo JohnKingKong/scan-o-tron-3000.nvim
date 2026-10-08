@@ -214,6 +214,22 @@ describe("scan-o-tron-3000.adapters.ts-spec", function()
       assert.is_nil(by_file["/repo/a.spec.ts"]["b fails"])
     end)
 
+    it("survives stdout pollution before the JSON (e.g. a NestJS app's Logger writing warnings to stdout)", function()
+      local json = vim.json.encode({
+        testResults = {
+          {
+            assertionResults = {
+              { ancestorTitles = {}, title = "passes", status = "passed" },
+            },
+          },
+        },
+      })
+      local stdout = "[Nest] 768  - WARN [AgentExecutionRegistry] Replacing existing controller\n" .. json
+
+      local parsed = ts_spec.parse_results(stdout)
+      assert.are.equal("pass", parsed["passes"].status)
+    end)
+
     it("also groups mocha results by each test's `file` field", function()
       local stdout = vim.json.encode({
         tests = {

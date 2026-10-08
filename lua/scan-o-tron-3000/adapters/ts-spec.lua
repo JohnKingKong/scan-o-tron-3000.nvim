@@ -143,6 +143,30 @@ end
 
 local STATUS_MAP = { passed = "pass", failed = "fail", pending = "skip", skipped = "skip" }
 
+-- jest/vitest/mocha's JSON reporters always print their single-line JSON
+-- summary as the very last line of stdout -- but application code under
+-- test can write other things to stdout first (e.g. a NestJS app's default
+-- Logger transport writes warn/log-level messages to stdout, not stderr,
+-- confirmed empirically: a project-wide run across evolia-api produced a
+-- `[Nest] ... WARN [...] Replacing existing controller...` line before the
+-- JSON, which `vim.json.decode` on the whole stream then choked on,
+-- silently discarding every result for the entire run). Scanning backwards
+-- for the last line that actually parses as JSON survives that pollution
+-- instead of assuming the entire stream is a single JSON document.
+local function decode_last_json_line(stdout)
+  local lines = vim.split(stdout, "\n", { plain = true })
+  for i = #lines, 1, -1 do
+    local line = lines[i]
+    if line ~= "" then
+      local ok, decoded = pcall(vim.json.decode, line)
+      if ok then
+        return decoded
+      end
+    end
+  end
+  error("scan-o-tron-3000: no valid JSON line found in test runner output")
+end
+
 -- Returns two values: `by_name` (flat, single-namespace map used for the
 -- current file's own scoped run -- the long-standing name-only-matching
 -- limitation applies here) and `by_file` (the same entries additionally
@@ -150,7 +174,7 @@ local STATUS_MAP = { passed = "pass", failed = "fail", pending = "skip", skipped
 -- result), so a project-wide run can populate every tested file's panel
 -- entry and gutter marks, not just whichever file happens to be open.
 function M.parse_results(stdout)
-  local decoded = vim.json.decode(stdout)
+  local decoded = decode_last_json_line(stdout)
   local by_name = {}
   local by_file = {}
 
