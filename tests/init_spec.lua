@@ -229,6 +229,67 @@ describe("scan-o-tron-3000.init", function()
     end
   )
 
+  it(
+    "run_project() disables swapfile for buffers it loads to populate results (avoids fd exhaustion on large projects)",
+    function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_name(bufnr, "/tmp/fake_swap_current.spec.ts")
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "line1" })
+      vim.api.nvim_set_current_buf(bufnr)
+
+      -- A buffer the "user" already has open (and may have unsaved changes
+      -- in) must be left alone -- only buffers run_project() loads itself
+      -- should have swapfile touched.
+      local already_open_bufnr = vim.fn.bufadd("/tmp/fake_swap_already_open.spec.ts")
+      vim.fn.bufload(already_open_bufnr)
+      vim.bo[already_open_bufnr].swapfile = true
+
+      local captured_on_exit
+      local fake_adapter = {
+        name = "fake",
+        is_test_file = function(path)
+          return path:match("%.spec%.ts$") ~= nil
+        end,
+        treesitter_query = function()
+          return { { type = "test", name = "some test", range = { 0, 0, 1, 0 } } }
+        end,
+        build_command = function()
+          return { "fake-cmd" }
+        end,
+        parse_results = function()
+          return {
+            ["some test"] = { status = "pass" },
+          }, {
+            ["/tmp/fake_swap_current.spec.ts"] = { ["some test"] = { status = "pass" } },
+            ["/tmp/fake_swap_new.spec.ts"] = { ["some test"] = { status = "pass" } },
+            ["/tmp/fake_swap_already_open.spec.ts"] = { ["some test"] = { status = "pass" } },
+          }
+        end,
+      }
+
+      scan.setup({ adapters = { fake_adapter } })
+
+      local original_system = vim.system
+      vim.system = function(_, _, on_exit)
+        captured_on_exit = on_exit
+        return { pid = 1 }
+      end
+
+      scan.run_project()
+      captured_on_exit({ code = 0, stdout = "{}" })
+      vim.wait(100, function()
+        return vim.fn.bufnr("/tmp/fake_swap_new.spec.ts") ~= -1
+      end)
+
+      vim.system = original_system
+
+      local new_bufnr = vim.fn.bufnr("/tmp/fake_swap_new.spec.ts")
+      assert.is_true(new_bufnr ~= -1)
+      assert.is_false(vim.bo[new_bufnr].swapfile)
+      assert.is_true(vim.bo[already_open_bufnr].swapfile, "must not touch a buffer the user already had open")
+    end
+  )
+
   it("run_project() notifies when the run starts and again with a pass/fail summary on completion", function()
     local bufnr = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_name(bufnr, "/tmp/fake_notify.spec.ts")

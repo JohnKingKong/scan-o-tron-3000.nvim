@@ -76,6 +76,19 @@ local function populate_project_results(adapter, current_path, by_file)
     if vim.fs.normalize(file_path) ~= vim.fs.normalize(current_path) then
       local ok, err = pcall(function()
         local file_bufnr = vim.fn.bufadd(file_path)
+        -- A project-wide run can touch hundreds of files; swapfile=true
+        -- (Neovim's default) holds one fd open per loaded buffer for as
+        -- long as it stays loaded, which exhausts the process's fd limit on
+        -- a large enough project (confirmed: a 369-file run produced
+        -- cascading EMFILE errors from unrelated plugins -- gitsigns,
+        -- flash.nvim, blink.cmp -- once the limit was hit). These buffers
+        -- are read-only scans for test positions, not something the user is
+        -- editing, so there's nothing worth a swap file in the first place.
+        -- Only touch the option for buffers we're loading ourselves, not
+        -- ones the user already has open (and may have unsaved changes in).
+        if not vim.api.nvim_buf_is_loaded(file_bufnr) then
+          vim.bo[file_bufnr].swapfile = false
+        end
         vim.fn.bufload(file_bufnr)
 
         local file_tree = positions.discover(file_bufnr, adapter)
